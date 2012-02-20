@@ -1,1 +1,5 @@
 Simple ray-casting implementation in Javascript/HTML5
+
+For now, the code has been tested in Safari 5.1, but I suspect it should work in Firefox 4 and above.
+
+There was a problem loading the images in Chrome - still looking at fixing this.
