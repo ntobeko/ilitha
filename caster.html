@@ -1,0 +1,348 @@
+<!--
+        Copyright (c) 2012, Ntobeko Wakaba
+        All rights reserved.
+        
+        Redistribution and use in source and binary forms, with or without
+        modification, are permitted provided that the following conditions are met: 
+        
+        1. Redistributions of source code must retain the above copyright notice, this
+           list of conditions and the following disclaimer. 
+        2. Redistributions in binary form must reproduce the above copyright notice,
+           this list of conditions and the following disclaimer in the documentation
+           and/or other materials provided with the distribution. 
+        
+        THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+        ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+        WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+        DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+        ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+        (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+        LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+        ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+        (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+        SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+        
+        The views and conclusions contained in the software and documentation are those
+        of the authors and should not be interpreted as representing official policies, 
+        either expressed or implied, of the FreeBSD Project.
+-->
+<html>
+    <head>
+        <title>ilitha ray caster experiment</title>
+        <script>
+            var world;
+
+            var canvas;  
+            var canvas_pointer;  
+            var canvas_images;
+            
+            var ctx;
+            var ctx_pointer;
+            var ctx_images;
+
+            var image_data_wall;
+            
+            var CELL_WIDTH = 20;
+            var CELL_HEIGHT = 20;
+            var POINTER_BASE = 5;
+            var POINTER_HEIGHT = 10;
+            var pointer_x = CELL_WIDTH + CELL_WIDTH / 2;
+            var pointer_y = CELL_HEIGHT + CELL_HEIGHT / 2;
+            var pointer_angle = 0;
+            var MOVE_INCREMENT = 5;
+            var CASTER_INCREMENT = 1;
+            var ANGLE_INCREMENT = 5;
+            var ANGLE_360 = 360;
+            var VIEW_ANGLE = 60;
+            var VIEWPORT_SIZE = 600;
+            
+            var WALL_STONE = 1;
+            var WALL_BRICK = 2;
+            var WALL_WINDOW = 3;
+            var WALL_DOOR = 4;
+            var walls = [];
+            
+            function defineWorld() {
+            
+                world = [
+                            [1,1,4,1,1,1,1,1,1,1],
+                            [1,0,0,0,0,1,0,0,0,2],
+                            [1,0,0,0,0,1,0,0,0,1],
+                            [1,0,0,0,0,0,0,0,0,2],
+                            [1,0,0,1,1,1,0,0,0,1],
+                            [1,0,0,0,0,1,0,0,0,2],
+                            [1,0,0,1,1,1,0,0,0,1],
+                            [1,0,0,0,0,0,0,0,0,2],
+                            [1,2,0,0,0,0,0,0,0,1],
+                            [1,1,1,0,1,1,1,1,1,2],
+                            [1,1,1,0,0,0,0,0,0,1],
+                            [1,0,0,0,0,1,0,0,0,2],
+                            [1,0,0,0,0,1,0,0,0,1],
+                            [1,0,0,0,0,0,0,0,0,2],
+                            [1,0,0,1,1,1,0,0,0,1],
+                            [1,0,0,0,0,2,0,0,0,2],
+                            [1,0,0,1,1,1,0,0,0,1],
+                            [1,0,0,0,0,0,0,0,0,2],
+                            [1,1,0,0,0,0,0,0,0,1],
+                            [1,1,1,1,4,1,1,1,1,2]
+                        ];
+            }            
+            
+            function initMapViewport() {
+                
+                for (var j=0; j<20; j++) {
+
+                    for (var k=(VIEWPORT_SIZE / CELL_WIDTH); k< (VIEWPORT_SIZE / CELL_WIDTH) + 10; k++) {
+
+                        if (world[j][k-(VIEWPORT_SIZE / CELL_WIDTH)] != 0) {
+                
+                            ctx.fillRect (k * CELL_WIDTH, j * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT);                              
+                        }
+                        else {
+
+                            //ctx.strokeRect (k * CELL_WIDTH, j * CELL_HEIGHT, CELL_WIDTH, CELL_HEIGHT);  
+                        }
+                    }
+                }
+            }
+
+            function drawTriangle(x, y, angle) {
+                x += VIEWPORT_SIZE;                
+                ctx_pointer.beginPath();
+                ctx_pointer.moveTo(x - POINTER_HEIGHT / 2, y - POINTER_BASE / 2);
+                ctx_pointer.lineTo(x + POINTER_HEIGHT / 2, y);
+                ctx_pointer.lineTo(x - POINTER_HEIGHT / 2, y + POINTER_BASE / 2);
+                ctx_pointer.fill();
+            }
+
+            function initMapPointer() {                
+                                        
+            }
+            
+            defineWorld();
+        
+            function rotateX(x, y, angle) {
+                var xx = pointer_x + VIEWPORT_SIZE; 
+                return Math.cos(angle) * (x - xx) - Math.sin(angle) * (y - pointer_y) + xx;                        
+            }
+            
+            function rotateY(x, y, angle) {
+                var xx = pointer_x + VIEWPORT_SIZE;
+                return Math.sin(angle) * (x - xx) + Math.cos(angle) * (y - pointer_y) + pointer_y;
+            }
+            
+            function rotateRight() {
+                pointer_angle += ANGLE_INCREMENT;
+                if (pointer_angle > ANGLE_360)
+                    pointer_angle -= ANGLE_360;
+                
+                rotate(pointer_angle);
+            }
+
+            function moveWithoutCollision(x, y) {
+                if (world[Math.floor(y / CELL_HEIGHT)][Math.floor(x / CELL_WIDTH)] == 0) {
+                    pointer_x = x;
+                    pointer_y = y;
+                    rotate(pointer_angle);
+                }
+            }
+            
+            function moveBack() {
+                var angle = Math.PI * (pointer_angle/180);
+                var x = pointer_x - Math.cos(angle) * MOVE_INCREMENT;
+                var y = pointer_y - Math.sin(angle) * MOVE_INCREMENT;
+                moveWithoutCollision(x, y);
+            }
+            
+            function moveForward() {
+                var angle = Math.PI * (pointer_angle/180);
+                x = pointer_x + Math.cos(angle) * MOVE_INCREMENT;
+                y = pointer_y + Math.sin(angle) * MOVE_INCREMENT;
+                moveWithoutCollision(x, y);
+            }
+            
+            function rotate(angle) {
+                var r_angle = Math.PI * (angle/180);
+                var x = pointer_x + VIEWPORT_SIZE;
+                var px = x - POINTER_HEIGHT / 2;
+                var py = pointer_y - POINTER_BASE / 2;
+                
+                var xx = rotateX(px, py, r_angle);
+                var yy = rotateY(px, py, r_angle);
+                
+                ctx_pointer.beginPath();
+                ctx_pointer.moveTo(xx, yy);
+
+                px = x + POINTER_HEIGHT / 2;
+                py = pointer_y;
+                xx = rotateX(px, py, r_angle);
+                yy = rotateY(px, py, r_angle);
+                
+                ctx_pointer.lineTo(xx, yy);
+                
+                px = x - POINTER_HEIGHT / 2;
+                py = pointer_y + POINTER_BASE / 2;
+                xx = rotateX(px, py, r_angle);
+                yy = rotateY(px, py, r_angle);
+                
+                ctx_pointer.lineTo(xx, yy);
+                
+                ctx_pointer.clearRect(0, 0, VIEWPORT_SIZE * 2, VIEWPORT_SIZE);
+                ctx_pointer.fill();
+                renderViewport(angle)
+            }
+            
+            function rotateLeft() {
+                // p'x = cos(theta) * (px-ox) - sin(theta) * (py-oy) + ox
+                // p'y = sin(theta) * (px-ox) + cos(theta) * (py-oy) + oy
+
+                pointer_angle -= ANGLE_INCREMENT;
+                if (pointer_angle < 0)
+                    pointer_angle += ANGLE_360;
+                
+                rotate(pointer_angle);
+            }
+            
+            function keyPressed(event) {
+                switch (event.keyCode) {
+                    case 38: moveForward();
+                        break;
+                    case 40: moveBack();
+                        break;
+                    case 37: rotateLeft();
+                        break;
+                    case 39 : rotateRight();
+                }
+            }
+            
+            function getDistanceToWall(angle) {
+                angle = Math.PI * (angle/180);
+
+                var x = pointer_x;
+                var y = pointer_y;
+                
+                var hit = 0;
+                
+                while (!hit) {
+                    x += Math.cos(angle) * CASTER_INCREMENT;                    
+                    y += Math.sin(angle) * CASTER_INCREMENT;                    
+                    hit = world[Math.floor(y / CELL_HEIGHT)][Math.floor(x / CELL_WIDTH)]; 
+                }
+        
+                return [(1) * Math.sqrt((x - pointer_x) * (x - pointer_x) + (y - pointer_y) * (y - pointer_y)), hit];
+            }
+
+            function renderViewport(angle) {
+
+                var img_data = ctx_pointer.createImageData(VIEWPORT_SIZE, VIEWPORT_SIZE); 
+
+                var caster_angle = angle - (VIEW_ANGLE / 2);
+                var caster_angle_increment = VIEW_ANGLE / VIEWPORT_SIZE;                
+                var distance_to_wall = getDistanceToWall(caster_angle);
+                var sliver_height = Math.floor(1 / distance_to_wall[0] * VIEWPORT_SIZE * CELL_WIDTH * .8);
+                var voffset = 0;
+                var color_offset;
+                var current_wall;
+                var wall_index;
+                
+                for (var j=0; j<VIEWPORT_SIZE; j++) {
+                    
+                    var original_offset = Math.floor((VIEWPORT_SIZE - sliver_height) / 2);
+                    voffset = original_offset;
+                        
+                    wall_index = distance_to_wall[1];
+                    current_wall = walls[wall_index];
+                    for (var k=0; k < sliver_height; k++) {
+                        color_offset = getColor(j, voffset, sliver_height);
+                        drawPixel(j, voffset++,
+                                    current_wall.data[color_offset++],
+                                    current_wall.data[color_offset++],
+                                    current_wall.data[color_offset], img_data);
+                    }
+
+                    caster_angle += caster_angle_increment;
+                    distance_to_wall = getDistanceToWall(caster_angle);
+                    sliver_height = Math.floor(1 / distance_to_wall[0] * VIEWPORT_SIZE * CELL_WIDTH * .8);
+                }
+                ctx_pointer.putImageData(img_data, 0, 0);
+            }
+
+            function drawPixel(x, y, r, g, b, img_data) {
+                var offset = y * VIEWPORT_SIZE * 4 + x * 4;
+                img_data.data[offset++] = r;
+                img_data.data[offset++] = g;
+                img_data.data[offset++] = b;
+                img_data.data[offset] = 255;
+            }
+            
+            function initImages() {
+                
+                var image_stone = document.getElementById("wall_stone");
+                var image_brick = document.getElementById("wall_brick");
+                var image_window = document.getElementById("wall_brick");
+                var image_door = document.getElementById("wall_door");
+
+                ctx_images.drawImage(image_stone, VIEWPORT_SIZE, 0);
+                walls[WALL_STONE] = ctx_images.getImageData(VIEWPORT_SIZE, 0, 200, 200);                
+                ctx_images.clearRect(VIEWPORT_SIZE, 0, 200, 200);
+
+                ctx_images.drawImage(image_brick, VIEWPORT_SIZE, 0);
+                walls[WALL_BRICK] = ctx_images.getImageData(VIEWPORT_SIZE, 0, 200, 200);                
+                ctx_images.clearRect(VIEWPORT_SIZE, 0, 200, 200);
+
+                ctx_images.drawImage(image_window, VIEWPORT_SIZE, 0);
+                walls[WALL_WINDOW] = ctx_images.getImageData(VIEWPORT_SIZE, 0, 200, 200);                
+                ctx_images.clearRect(VIEWPORT_SIZE, 0, 200, 200);
+
+                ctx_images.drawImage(image_door, VIEWPORT_SIZE, 0);
+                walls[WALL_DOOR] = ctx_images.getImageData(VIEWPORT_SIZE, 0, 200, 200);                
+                ctx_images.clearRect(VIEWPORT_SIZE, 0, 200, 200);
+
+            }
+            
+            function getColor(x, y, sliver_height) {
+                y = Math.floor(y - (VIEWPORT_SIZE - sliver_height) / 2) + 1;
+                y = Math.floor((200 / VIEWPORT_SIZE) * y * VIEWPORT_SIZE / sliver_height);
+                var data_offset = y * 200 * 4 + x * 4;
+                return data_offset;
+            }
+            
+            function init() {
+
+                canvas = document.getElementById("viewport");  
+                canvas_pointer = document.getElementById("pointer_layer");  
+                canvas_images = document.getElementById("image_canvas");  
+                
+                ctx = canvas.getContext("2d");
+                ctx_pointer = canvas_pointer.getContext("2d");
+                ctx_images = canvas_images.getContext("2d");
+                
+                ctx.fillStyle = "rgba(0, 0, 200, 0.5)";                  
+                ctx_pointer.fillStyle = "rgba(200, 0, 0, 0.5)";  
+                
+                initMapViewport();
+                initImages();
+                
+                rotate(0);                
+            }
+       
+        </script>
+    </head>    
+    
+    <body onload="init()" onkeydown="keyPressed(event)">
+        <center>
+            <div style="position: relative">
+                <canvas id="viewport" width="800px" height="400px" style="position: absolute; left: 0; top: 0; z-index: 0; border: 1px solid black;">
+                    Sorry, your browser does not support the HTML5 Canvas.
+                </canvas>
+                <canvas id="pointer_layer" width="800px" height="400px" style="position: absolute; left: 0; top: 0; z-index: 1; border: 1px solid black;">
+                </canvas>
+                <canvas id="image_canvas" width="800px" height="200px" style="position: absolute; left: 0; top: 401; z-index: 1; border: 0px solid black;">
+                </canvas>
+                <img id="wall_stone" src="stone_wall.png" width="0px" height="0px" crossorigin style="position: absolute; top: 401;"/>
+                <img id="wall_brick" src="brick_wall2.jpg" width="0px" height="0px" crossorigin style="position: absolute; top: 401;"/>
+                <img id="wall_door" src="double_door2.jpg" width="0px" height="0px" crossorigin style="position: absolute; top: 401;"/>
+            </div>
+        </center>
+    </body>
+</html>
